@@ -25,14 +25,8 @@ const SettingsForm = ({
   };
 
   const handleSubmit = async (data: SettingsFormData) => {
-    try {
-      await onSubmit(data); // Wait for submission to complete
-      setEditMode(false);
-      // Only disable edit mode after success
-    } catch (error) {
-      // Keep form in edit mode if submission fails
-      console.error("Submission failed:", error);
-    }
+    await onSubmit(data);
+    setEditMode(false);
   };
 
   return (
@@ -68,14 +62,14 @@ const SettingsForm = ({
               <Button
                 type="button"
                 onClick={toggleEditMode}
-                className="bg-[#eb8686] text-white hover:bg-[#e45a5a]"
+                className="bg-secondary-500 text-white hover:bg-secondary-600"
               >
                 {editMode ? "Cancel" : "Edit"}
               </Button>
               {editMode && (
                 <Button
                   type="submit"
-                  className=" bg-[#27272a] text-white hover:bg-[#27272a]"
+                  className="bg-primary-700 text-white hover:bg-primary-800"
                 >
                   Save Changes
                 </Button>

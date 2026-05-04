@@ -1,52 +1,85 @@
 "use client";
+
 import Image from "next/image";
-import React from "react";
 import { motion } from "framer-motion";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-const HeroSectoin = () => {
+
+const heroAnimation = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.8, ease: "easeOut" },
+};
+
+const HeroSection = () => {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = useCallback(() => {
+    if (!searchQuery.trim()) return;
+    // TODO: integrate with router or search API
+    console.log("Searching for:", searchQuery);
+  }, [searchQuery]);
+
   return (
-    <div className="relative h-screen">
+    <section className="relative h-screen w-full overflow-hidden">
+      {/* Background Image */}
       <Image
         src="/landing-splash.jpg"
-        alt="Rentiful Rental Platform Hero Section"
+        alt="Rental platform hero background"
         fill
-        className="object-cover object-center"
         priority
-      ></Image>
-      <div className="absolute inset-0 bg-black opacity-50"></div>
+        className="object-cover object-center"
+        sizes="100vw"
+      />
+
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
+
+      {/* Content */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-        className="absolute top-1/3 transform  text-center w-full"
+        {...heroAnimation}
+        className="absolute top-1/3 w-full text-center"
       >
-        <div className="max-w-4xl mx-auto px-16 sm:px-12">
-          <h1 className="text-5xl font-bold text-white mb-4">
+        <div className="mx-auto max-w-4xl px-6 sm:px-12">
+          <h1 className="mb-4 text-4xl font-bold text-white sm:text-5xl">
             Start your journey to finding the perfect place to call home
           </h1>
-          <p className="text-xl text-white mb-8">
+
+          <p className="mb-8 text-lg text-white sm:text-xl">
             Explore our wide range of rental properties tailored to fit your
-            lifestyle and need!
+            lifestyle and needs.
           </p>
-          <div className="flex justify-center">
+
+          {/* Search Bar */}
+          <div
+            className="mx-auto flex max-w-lg"
+            role="search"
+            aria-label="Property search"
+          >
+            <label htmlFor="search" className="sr-only">
+              Search properties
+            </label>
+
             <input
+              id="search"
               type="text"
-              value="search query"
-              onChange={() => {}}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by city, neighborhood or address"
-              className="w-full max-w-lg roundedd-none rounded-l-xl border-none bg-white h-12"
+              className="h-12 w-full rounded-l-xl border-none bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-[#eb8686]"
             />
+
             <Button
-              onClick={() => {}}
-              className="bg-[#eb8686] text-white rounded-none rounded-r-xl border-none hover:bg-[#e45a5a] h-12"
+              onClick={handleSearch}
+              className="h-12 rounded-l-none rounded-r-xl bg-[#eb8686] px-6 text-white hover:bg-[#e45a5a]"
             >
               Search
             </Button>
           </div>
         </div>
       </motion.div>
-    </div>
+    </section>
   );
 };
 
-export default HeroSectoin;
+export default HeroSection;

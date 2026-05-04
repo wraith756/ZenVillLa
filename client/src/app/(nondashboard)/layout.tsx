@@ -4,42 +4,56 @@ import Navbar from "@/components/Navbar";
 import { NAVBAR_HEIGHT } from "@/lib/constants";
 import { useGetAuthUserQuery } from "@/state/api";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import { ReactNode, useEffect } from "react";
 
-const Layout = ({ children }: { children: React.ReactNode }) => {
+/* ---------------- Types ---------------- */
+
+interface LayoutProps {
+  children: ReactNode;
+}
+
+/* ---------------- Component ---------------- */
+
+const Layout = ({ children }: LayoutProps) => {
   const { data: authUser, isLoading: authLoading } = useGetAuthUserQuery();
+
   const router = useRouter();
   const pathname = usePathname();
-  const [isLoading, setIsLoading] = useState(true);
+
+  /* ---------------- Redirect Logic ---------------- */
 
   useEffect(() => {
-    if (authLoading) return; // Wait for auth check to complete
+    if (authLoading || !authUser) return;
 
-    // If no auth user, treat as public route
-    if (!authUser) {
-      setIsLoading(false);
-      return;
-    }
+    const role = authUser.userRole?.toLowerCase();
 
-    // Only redirect managers from search/home
-    const userRole = authUser.userRole?.toLowerCase();
+    // Redirect managers away from public routes
     if (
-      userRole === "manager" &&
-      (pathname.startsWith("/search") || pathname === "/")
+      role === "manager" &&
+      (pathname === "/" || pathname.startsWith("/search"))
     ) {
-      router.push("/managers/properties", { scroll: false });
-    } else {
-      setIsLoading(false);
+      router.replace("/managers/properties");
     }
-  }, [authUser, authLoading, router, pathname]);
+  }, [authUser, authLoading, pathname, router]);
 
-  if (authLoading || isLoading) return <>Loading...</>;
+  /* ---------------- Loading State ---------------- */
+
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-gray-600">
+        Loading...
+      </div>
+    );
+  }
+
+  /* ---------------- Render ---------------- */
 
   return (
     <div className="h-full w-full">
       <Navbar />
+
       <main
-        className={`h-full flex w-full flex-col`}
+        className="flex h-full w-full flex-col"
         style={{ paddingTop: `${NAVBAR_HEIGHT}px` }}
       >
         {children}

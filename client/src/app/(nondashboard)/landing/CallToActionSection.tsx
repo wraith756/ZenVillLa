@@ -1,55 +1,74 @@
 "use client";
+
 import Image from "next/image";
-import React from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+
+const ctaAnimation = {
+  initial: { opacity: 0, y: 20 },
+  whileInView: { opacity: 1, y: 0 },
+  transition: { duration: 0.5, ease: "easeOut" },
+  viewport: { once: true },
+};
+
 const CallToActionSection = () => {
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <div className="relative py-24">
+    <section className="relative py-24 overflow-hidden">
+      {/* Background Image */}
       <Image
         src="/landing-call-to-action.jpg"
-        alt="Rentiful Search Section Backgroud"
+        alt="Rental search call to action background"
         fill
-        className="object-cover object-center"
         priority
+        sizes="100vw"
+        className="object-cover object-center"
       />
-      <div className="absolute inset-0 bg-black opacity-60"></div>
+
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
+
+      {/* Content */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        transition={{ duration: 0.5 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="relative max-w-4xl xl:max-w-6xl mx-auto px-6 sm:px-8 lg:px-12 xl:px-16 py-12"
+        {...ctaAnimation}
+        className="relative mx-auto max-w-4xl xl:max-w-6xl px-6 sm:px-8 lg:px-12 xl:px-16 py-12"
       >
-        <div className="flex flex-col md:flex-row justify-between items-center">
-          <div className="mb-6 md:mb-0 md:mr-10">
-            <h2 className="text-2xl font-bold text-white">
-              Find Your Dream Home
-            </h2>
-          </div>
-          <div>
-            <p className="text-white mb-3">
+        <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
+          <h2 className="text-2xl font-bold text-white">
+            Find Your Dream Home
+          </h2>
+
+          <div className="text-center md:text-left">
+            <p className="mb-3 text-white">
               Discover Spaces That Speak Your Style
             </p>
-            <div className="flex justify-center md:justify-start gap-4">
+
+            <div className="flex justify-center gap-4 md:justify-start">
               <button
-                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-                className="inline-block text-[#27272a] bg-white rounded-lg px-6 py-3 font-semibold hover:bg-[#82828b]"
+                type="button"
+                onClick={scrollToTop}
+                className="rounded-lg bg-white px-6 py-3 font-semibold text-[#27272a] transition hover:bg-[#82828b]"
+                aria-label="Search properties"
               >
                 Search
               </button>
+
               <Link
-                href="/singup"
-                className="inline-block text-white bg-[#eb8686] rounded-lg px-6 py-3 font-semibold hover:bg-[#e45a5a]"
+                href="/signup"
                 scroll={false}
+                className="rounded-lg bg-[#eb8686] px-6 py-3 font-semibold text-white transition hover:bg-[#e45a5a]"
+                aria-label="Sign up"
               >
-                SingUp
+                Sign Up
               </Link>
             </div>
           </div>
         </div>
       </motion.div>
-    </div>
+    </section>
   );
 };
 

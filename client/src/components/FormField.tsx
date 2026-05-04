@@ -25,7 +25,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Edit, X, Plus } from "lucide-react";
 import { registerPlugin } from "filepond";
-import { FilePond, FilePondProps } from "react-filepond";
+import { FilePond } from "react-filepond";
 import "filepond/dist/filepond.min.css";
 import FilePondPluginImagePreview from "filepond-plugin-image-preview";
 import FilePondPluginImageExifOrientation from "filepond-plugin-image-exif-orientation";
@@ -134,15 +134,11 @@ export const CustomFormField: React.FC<FormFieldProps> = ({
             className={`${inputClassName}`}
             onupdatefiles={(fileItems) => {
               const files = fileItems.map((fileItem) => fileItem.file);
-              field.onChange(multiple ? files : files[0]);
+              field.onChange(files);
             }}
-            allowMultiple={multiple}
-            maxFiles={multiple ? undefined : 1}
-            labelIdle={`Drag & Drop your ${
-              multiple ? "files" : "file"
-            } or <span class="filepond--label-action">Browse</span>`}
+            allowMultiple={true}
+            labelIdle={`Drag & Drop your images or <span class="filepond--label-action">Browse</span>`}
             credits={false}
-            acceptedFileTypes={accept ? [accept] : undefined}
           />
         );
       case "number":
@@ -151,8 +147,6 @@ export const CustomFormField: React.FC<FormFieldProps> = ({
             type="number"
             placeholder={placeholder}
             {...field}
-            value={field.value ?? ""}
-            onChange={(e) => field.onChange(e.target.valueAsNumber)}
             className={`border-gray-200 p-4 ${inputClassName}`}
             disabled={disabled}
           />
@@ -172,7 +166,6 @@ export const CustomFormField: React.FC<FormFieldProps> = ({
             type={type}
             placeholder={placeholder}
             {...field}
-            value={field.value ?? ""}
             className={`border-gray-200 p-4 ${inputClassName}`}
             disabled={disabled}
           />
@@ -217,7 +210,6 @@ export const CustomFormField: React.FC<FormFieldProps> = ({
     />
   );
 };
-
 interface MultiInputFieldProps {
   name: string;
   control: any;

@@ -1,3 +1,5 @@
+"use client";
+
 import {
   FiltersState,
   setFilters,
@@ -6,9 +8,9 @@ import {
 } from "@/state";
 import { useAppSelector } from "@/state/redux";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
-import { debounce } from "lodash";
+import debounce from "lodash/debounce";
 import { cleanParams, cn, formatPriceValue } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Filter, Grid, List, Search } from "lucide-react";
@@ -22,68 +24,97 @@ import {
 } from "@/components/ui/select";
 import { PropertyTypeIcons } from "@/lib/constants";
 
+/* ---------------- Component ---------------- */
+
 const FiltersBar = () => {
   const dispatch = useDispatch();
   const router = useRouter();
   const pathname = usePathname();
-  const filters = useAppSelector((state) => state.global.filters);
-  const isFiltersFullOpen = useAppSelector(
-    (state) => state.global.isFiltersFullOpen
+
+  const { filters, isFiltersFullOpen, viewMode } = useAppSelector(
+    (state) => state.global
   );
-  const viewMode = useAppSelector((state) => state.global.viewMode);
+
   const [searchInput, setSearchInput] = useState(filters.location);
 
-  const updateURL = debounce((newFilters: FiltersState) => {
-    const cleanFilters = cleanParams(newFilters);
-    const updatedSearchParams = new URLSearchParams();
+  /* ---------------- URL Sync ---------------- */
 
-    Object.entries(cleanFilters).forEach(([key, value]) => {
-      updatedSearchParams.set(
-        key,
-        Array.isArray(value) ? value.join(",") : value.toString()
-      );
-    });
+  const updateURL = useMemo(
+    () =>
+      debounce((newFilters: FiltersState) => {
+        const cleanFilters = cleanParams(newFilters);
+        const params = new URLSearchParams();
 
-    router.push(`${pathname}?${updatedSearchParams.toString()}`);
-  });
+        Object.entries(cleanFilters).forEach(([key, value]) => {
+          params.set(
+            key,
+            Array.isArray(value) ? value.join(",") : String(value)
+          );
+        });
 
-  const handleFilterChange = (
-    key: string,
-    value: any,
-    isMin: boolean | null
-  ) => {
-    let newValue = value;
+        router.push(`${pathname}?${params.toString()}`);
+      }, 400),
+    [router, pathname]
+  );
 
-    if (key === "priceRange" || key === "squareFeet") {
-      const currentArrayRange = [...filters[key]];
-      if (isMin !== null) {
-        const index = isMin ? 0 : 1;
-        currentArrayRange[index] = value === "any" ? null : Number(value);
+  useEffect(() => {
+    return () => updateURL.cancel();
+  }, [updateURL]);
+
+  /* ---------------- Filter Change ---------------- */
+
+  const handleFilterChange = useCallback(
+    <K extends keyof FiltersState>(
+      key: K,
+      value: string | number | number[],
+      isMin: boolean | null
+    ) => {
+      let newValue: FiltersState[K];
+
+      if (key === "priceRange" || key === "squareFeet") {
+        const range = [...filters[key]] as (number | null)[];
+        if (isMin !== null) {
+          range[isMin ? 0 : 1] = value === "any" ? null : Number(value);
+        }
+        newValue = range as FiltersState[K];
+      } else if (key === "coordinates") {
+        newValue =
+          value === "any"
+            ? ([0, 0] as FiltersState[K])
+            : (value as FiltersState[K]);
+      } else {
+        newValue = value === "any" ? "any" : (value as FiltersState[K]);
       }
-      newValue = currentArrayRange;
-    } else if (key === "coordinates") {
-      newValue = value === "any" ? [0, 0] : value.map(Number);
-    } else {
-      newValue = value === "any" ? "any" : value;
-    }
 
-    const newFilters = { ...filters, [key]: newValue };
-    dispatch(setFilters(newFilters));
-    updateURL(newFilters);
-  };
+      const updatedFilters = { ...filters, [key]: newValue };
+      dispatch(setFilters(updatedFilters));
+      updateURL(updatedFilters);
+    },
+    [dispatch, filters, updateURL]
+  );
+
+  /* ---------------- Location Search ---------------- */
 
   const handleLocationSearch = async () => {
+    if (!searchInput.trim()) return;
+
+    const controller = new AbortController();
+
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+      const res = await fetch(
+        `https://api.maptiler.com/geocoding/${encodeURIComponent(
           searchInput
-        )}.json?access_token=${
-          process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
-        }&fuzzyMatch=true`
+        )}.json?key=${process.env.NEXT_PUBLIC_MAPTILER_API_KEY}`,
+        { signal: controller.signal }
       );
-      const data = await response.json();
-      if (data.features && data.features.length > 0) {
-        const [lng, lat] = data.features[0].center;
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      if (data?.features?.length) {
+        const [lng, lat] = data.features[0].geometry.coordinates;
+
         dispatch(
           setFilters({
             location: searchInput,
@@ -91,15 +122,21 @@ const FiltersBar = () => {
           })
         );
       }
-    } catch (err) {
-      console.error("Error search location:", err);
+    } catch (error) {
+      if (!(error instanceof DOMException)) {
+        console.error("Location search failed:", error);
+      }
     }
+
+    return () => controller.abort();
   };
 
+  /* ---------------- Render ---------------- */
+
   return (
-    <div className="flex justify-between items-center w-full py-5">
+    <div className="flex w-full items-center justify-between py-5">
       {/* Filters */}
-      <div className="flex justify-between items-center gap-4 p-2">
+      <div className="flex items-center gap-4 p-2">
         {/* All Filters */}
         <Button
           variant="outline"
@@ -109,11 +146,11 @@ const FiltersBar = () => {
           )}
           onClick={() => dispatch(toggleFiltersFullOpen())}
         >
-          <Filter className="w-4 h-4" />
-          <span>All Filters</span>
+          <Filter className="h-4 w-4" />
+          All Filters
         </Button>
 
-        {/* Search Location */}
+        {/* Location Search */}
         <div className="flex items-center">
           <Input
             placeholder="Search location"
@@ -123,142 +160,50 @@ const FiltersBar = () => {
           />
           <Button
             onClick={handleLocationSearch}
-            className={`rounded-r-xl rounded-l-none border-l-none border-primary-400 shadow-none 
-                border hover:bg-primary-700 hover:text-primary-50`}
+            className="rounded-r-xl rounded-l-none border border-primary-400 hover:bg-primary-700 hover:text-primary-50"
           >
-            <Search className="w-4 h-4" />
+            <Search className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Price Range */}
-        <div className="flex gap-1">
-          {/* Minimum Price Selector */}
-          <Select
-            value={filters.priceRange[0]?.toString() || "any"}
-            onValueChange={(value) =>
-              handleFilterChange("priceRange", value, true)
-            }
-          >
-            <SelectTrigger className="w-22 rounded-xl border-primary-400">
-              <SelectValue>
-                {formatPriceValue(filters.priceRange[0], true)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent className="bg-white">
-              <SelectItem value="any">Any Min Price</SelectItem>
-              {[500, 1000, 1500, 2000, 3000, 5000, 10000].map((price) => (
-                <SelectItem key={price} value={price.toString()}>
-                  ${price / 1000}k+
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <PriceRangeFilter
+          priceRange={filters.priceRange}
+          onChange={handleFilterChange}
+        />
 
-          {/* Maximum Price Selector */}
-          <Select
-            value={filters.priceRange[1]?.toString() || "any"}
-            onValueChange={(value) =>
-              handleFilterChange("priceRange", value, false)
-            }
-          >
-            <SelectTrigger className="w-22 rounded-xl border-primary-400">
-              <SelectValue>
-                {formatPriceValue(filters.priceRange[1], false)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent className="bg-white">
-              <SelectItem value="any">Any Max Price</SelectItem>
-              {[1000, 2000, 3000, 5000, 10000].map((price) => (
-                <SelectItem key={price} value={price.toString()}>
-                  &lt;${price / 1000}k
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Beds and Baths */}
-        <div className="flex gap-1">
-          {/* Beds */}
-          <Select
-            value={filters.beds}
-            onValueChange={(value) => handleFilterChange("beds", value, null)}
-          >
-            <SelectTrigger className="w-26 rounded-xl border-primary-400">
-              <SelectValue placeholder="Beds" />
-            </SelectTrigger>
-            <SelectContent className="bg-white">
-              <SelectItem value="any">Any Beds</SelectItem>
-              <SelectItem value="1">1+ bed</SelectItem>
-              <SelectItem value="2">2+ beds</SelectItem>
-              <SelectItem value="3">3+ beds</SelectItem>
-              <SelectItem value="4">4+ beds</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Baths */}
-          <Select
-            value={filters.baths}
-            onValueChange={(value) => handleFilterChange("baths", value, null)}
-          >
-            <SelectTrigger className="w-26 rounded-xl border-primary-400">
-              <SelectValue placeholder="Baths" />
-            </SelectTrigger>
-            <SelectContent className="bg-white">
-              <SelectItem value="any">Any Baths</SelectItem>
-              <SelectItem value="1">1+ bath</SelectItem>
-              <SelectItem value="2">2+ baths</SelectItem>
-              <SelectItem value="3">3+ baths</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Beds & Baths */}
+        <BedsBathsFilter filters={filters} onChange={handleFilterChange} />
 
         {/* Property Type */}
-        <Select
-          value={filters.propertyType || "any"}
-          onValueChange={(value) =>
-            handleFilterChange("propertyType", value, null)
-          }
-        >
-          <SelectTrigger className="w-32 rounded-xl border-primary-400">
-            <SelectValue placeholder="Home Type" />
-          </SelectTrigger>
-          <SelectContent className="bg-white">
-            <SelectItem value="any">Any Property Type</SelectItem>
-            {Object.entries(PropertyTypeIcons).map(([type, Icon]) => (
-              <SelectItem key={type} value={type}>
-                <div className="flex items-center">
-                  <Icon className="w-4 h-4 mr-2" />
-                  <span>{type}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <PropertyTypeFilter
+          value={filters.propertyType}
+          onChange={handleFilterChange}
+        />
       </div>
 
       {/* View Mode */}
-      <div className="flex justify-between items-center gap-4 p-2">
-        <div className="flex border rounded-xl">
+      <div className="flex items-center gap-4 p-2">
+        <div className="flex rounded-xl border">
           <Button
             variant="ghost"
-            className={cn(
-              "px-3 py-1 rounded-none rounded-l-xl hover:bg-primary-600 hover:text-primary-50",
-              viewMode === "list" ? "bg-primary-700 text-primary-50" : ""
-            )}
             onClick={() => dispatch(setViewMode("list"))}
+            className={cn(
+              "rounded-l-xl px-3 py-1 hover:bg-primary-600 hover:text-primary-50",
+              viewMode === "list" && "bg-primary-700 text-primary-50"
+            )}
           >
-            <List className="w-5 h-5" />
+            <List className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"
-            className={cn(
-              "px-3 py-1 rounded-none rounded-r-xl hover:bg-primary-600 hover:text-primary-50",
-              viewMode === "grid" ? "bg-primary-700 text-primary-50" : ""
-            )}
             onClick={() => dispatch(setViewMode("grid"))}
+            className={cn(
+              "rounded-r-xl px-3 py-1 hover:bg-primary-600 hover:text-primary-50",
+              viewMode === "grid" && "bg-primary-700 text-primary-50"
+            )}
           >
-            <Grid className="w-5 h-5" />
+            <Grid className="h-5 w-5" />
           </Button>
         </div>
       </div>

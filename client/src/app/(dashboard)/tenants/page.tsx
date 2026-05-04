@@ -1,7 +1,9 @@
-import React from "react";
-
-const page = () => {
-  return <div>tenent</div>;
+const TenantPage = () => {
+  return (
+    <main className="flex h-full items-center justify-center">
+      <h1 className="text-lg font-medium">Tenant</h1>
+    </main>
+  );
 };
 
-export default page;
+export default TenantPage;

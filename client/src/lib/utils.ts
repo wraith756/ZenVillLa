@@ -2,83 +2,147 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { toast } from "sonner";
 
+/* ---------------------------------- */
+/* Classname Utility */
+/* ---------------------------------- */
+
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(...inputs));
 }
 
-export function formatEnumString(str: string) {
-  return str.replace(/([A-Z])/g, " $1").trim();
+/* ---------------------------------- */
+/* String & Formatting Helpers */
+/* ---------------------------------- */
+
+/** Converts "HighSpeedInternet" → "High Speed Internet" */
+export function formatEnumString(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .trim();
 }
 
-export function formatPriceValue(value: number | null, isMin: boolean) {
-  if (value === null || value === 0)
-    return isMin ? "Any Min Price" : "Any Max Price";
+/** Formats price values for filter UI */
+export function formatPriceValue(value: number | null, isMin: boolean): string {
+  if (!value) return isMin ? "Any Min Price" : "Any Max Price";
+
   if (value >= 1000) {
-    const kValue = value / 1000;
-    return isMin ? `$${kValue}k+` : `<$${kValue}k`;
+    const k = value / 1000;
+    return isMin ? `$${k}k+` : `<$${k}k`;
   }
+
   return isMin ? `$${value}+` : `<$${value}`;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function cleanParams(params: Record<string, any>): Record<string, any> {
-  return Object.fromEntries(
-    Object.entries(params).filter(
-      (
-        [_, value] // eslint-disable-line @typescript-eslint/no-unused-vars
-      ) =>
-        value !== undefined &&
-        value !== "any" &&
-        value !== "" &&
-        (Array.isArray(value) ? value.some((v) => v !== null) : value !== null)
+/* ---------------------------------- */
+/* URL / Query Helpers */
+/* ---------------------------------- */
+
+type CleanableValue =
+  | string
+  | number
+  | null
+  | undefined
+  | Array<string | number | null>;
+
+export function cleanParams<T extends Record<string, CleanableValue>>(
+  params: T
+): Partial<T> {
+  const cleaned: Partial<T> = {};
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      value === "any"
     )
-  );
+      return;
+
+    if (Array.isArray(value)) {
+      const filtered = value.filter((v) => v !== null && v !== undefined);
+      if (filtered.length === 0) return;
+      cleaned[key as keyof T] = filtered as T[keyof T];
+      return;
+    }
+
+    cleaned[key as keyof T] = value as T[keyof T];
+  });
+
+  return cleaned;
 }
 
-type MutationMessages = {
+/* ---------------------------------- */
+/* Toast Helpers */
+/* ---------------------------------- */
+
+type ToastMessages = {
   success?: string;
-  error: string;
+  error?: string;
 };
 
-export const withToast = async <T>(
-  mutationFn: Promise<T>,
-  messages: Partial<MutationMessages>
-) => {
-  const { success, error } = messages;
-
+export async function withToast<T>(
+  promise: Promise<T>,
+  messages: ToastMessages
+): Promise<T> {
   try {
-    const result = await mutationFn;
-    if (success) toast.success(success);
+    const result = await promise;
+    if (messages.success) toast.success(messages.success);
     return result;
   } catch (err) {
-    if (error) toast.error(error);
+    if (messages.error) toast.error(messages.error);
     throw err;
   }
-};
+}
 
-export const createNewUserInDatabase = async (
-  user: any,
-  idToken: any,
-  userRole: string,
-  fetchWithBQ: any
-) => {
-  const createEndpoint =
-    userRole?.toLowerCase() === "manager" ? "/managers" : "/tenants";
+/* ---------------------------------- */
+/* API Helpers */
+/* ---------------------------------- */
 
-  const createUserResponse = await fetchWithBQ({
-    url: createEndpoint,
+interface CognitoUser {
+  userId: string;
+  username?: string;
+}
+
+interface IdTokenPayload {
+  payload?: {
+    email?: string;
+  };
+}
+
+interface FetchWithBaseQuery {
+  (args: { url: string; method?: string; body?: unknown }): Promise<{
+    data?: unknown;
+    error?: unknown;
+  }>;
+}
+
+/**
+ * Ensures a user record exists in backend DB.
+ * Creates tenant or manager if missing.
+ */
+export async function createNewUserInDatabase(
+  user: CognitoUser,
+  idToken: IdTokenPayload,
+  userRole: "tenant" | "manager",
+  fetchWithBQ: FetchWithBaseQuery
+) {
+  const endpoint = userRole === "manager" ? "/managers" : "/tenants";
+
+  const response = await fetchWithBQ({
+    url: endpoint,
     method: "POST",
     body: {
       cognitoId: user.userId,
-      name: user.username,
-      email: idToken?.payload?.email || "",
+      name: user.username ?? "",
+      email: idToken.payload?.email ?? "",
       phoneNumber: "",
     },
   });
 
-  if (createUserResponse.error) {
+  if (response.error) {
     throw new Error("Failed to create user record");
   }
 
-  return createUserResponse;
-};
+  return response.data;
+}

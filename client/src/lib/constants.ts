@@ -24,6 +24,12 @@ import {
   LucideIcon,
 } from "lucide-react";
 
+/* ---------------- Shared Types ---------------- */
+
+export type IconMap<T extends string> = Record<T, LucideIcon>;
+
+/* ---------------- Amenities ---------------- */
+
 export enum AmenityEnum {
   WasherDryer = "WasherDryer",
   AirConditioning = "AirConditioning",
@@ -40,10 +46,10 @@ export enum AmenityEnum {
   WiFi = "WiFi",
 }
 
-export const AmenityIcons: Record<AmenityEnum, LucideIcon> = {
+export const AmenityIcons: IconMap<AmenityEnum> = {
   WasherDryer: Waves,
   AirConditioning: Thermometer,
-  Dishwasher: Waves,
+  Dishwasher: Tv,
   HighSpeedInternet: Wifi,
   HardwoodFloors: Home,
   WalkInClosets: Maximize,
@@ -55,6 +61,8 @@ export const AmenityIcons: Record<AmenityEnum, LucideIcon> = {
   PetsAllowed: PawPrint,
   WiFi: Wifi,
 };
+
+/* ---------------- Highlights ---------------- */
 
 export enum HighlightEnum {
   HighSpeedInternetAccess = "HighSpeedInternetAccess",
@@ -74,7 +82,7 @@ export enum HighlightEnum {
   QuietNeighborhood = "QuietNeighborhood",
 }
 
-export const HighlightIcons: Record<HighlightEnum, LucideIcon> = {
+export const HighlightIcons: IconMap<HighlightEnum> = {
   HighSpeedInternetAccess: Wifi,
   WasherDryer: Waves,
   AirConditioning: Thermometer,
@@ -92,6 +100,8 @@ export const HighlightIcons: Record<HighlightEnum, LucideIcon> = {
   QuietNeighborhood: VolumeX,
 };
 
+/* ---------------- Property Types ---------------- */
+
 export enum PropertyTypeEnum {
   Rooms = "Rooms",
   Tinyhouse = "Tinyhouse",
@@ -101,7 +111,7 @@ export enum PropertyTypeEnum {
   Cottage = "Cottage",
 }
 
-export const PropertyTypeIcons: Record<PropertyTypeEnum, LucideIcon> = {
+export const PropertyTypeIcons: IconMap<PropertyTypeEnum> = {
   Rooms: Home,
   Tinyhouse: Warehouse,
   Apartment: Building,
@@ -110,11 +120,14 @@ export const PropertyTypeIcons: Record<PropertyTypeEnum, LucideIcon> = {
   Cottage: Trees,
 };
 
-// Add this constant at the end of the file
-export const NAVBAR_HEIGHT = 49; // in pixels
+/* ---------------- Layout ---------------- */
 
-// Test users for development
-export const testUsers = {
+/** Navbar height in pixels (used for layout calculations) */
+export const NAVBAR_HEIGHT = 49;
+
+/* ---------------- Dev Utilities ---------------- */
+
+export const TEST_USERS = {
   tenant: {
     username: "Carol White",
     userId: "us-east-2:76543210-90ab-cdef-1234-567890abcdef",
@@ -122,8 +135,8 @@ export const testUsers = {
       loginId: "carol.white@example.com",
       authFlowType: "USER_SRP_AUTH",
     },
+    role: "tenant",
   },
-  tenantRole: "tenant",
   manager: {
     username: "John Smith",
     userId: "us-east-2:12345678-90ab-cdef-1234-567890abcdef",
@@ -131,6 +144,6 @@ export const testUsers = {
       loginId: "john.smith@example.com",
       authFlowType: "USER_SRP_AUTH",
     },
+    role: "manager",
   },
-  managerRole: "manager",
-};
+} as const;

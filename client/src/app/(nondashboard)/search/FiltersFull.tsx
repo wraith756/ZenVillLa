@@ -1,9 +1,11 @@
+"use client";
+
 import { FiltersState, initialState, setFilters } from "@/state";
 import { useAppSelector } from "@/state/redux";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
-import { debounce } from "lodash";
+import debounce from "lodash/debounce";
 import { cleanParams, cn, formatEnumString } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,29 +21,45 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
+/* ---------------- Component ---------------- */
+
 const FiltersFull = () => {
   const dispatch = useDispatch();
   const router = useRouter();
   const pathname = usePathname();
-  const filters = useAppSelector((state) => state.global.filters);
-  const [localFilters, setLocalFilters] = useState(initialState.filters);
-  const isFiltersFullOpen = useAppSelector(
-    (state) => state.global.isFiltersFullOpen
+
+  const { filters, isFiltersFullOpen } = useAppSelector(
+    (state) => state.global
   );
 
-  const updateURL = debounce((newFilters: FiltersState) => {
-    const cleanFilters = cleanParams(newFilters);
-    const updatedSearchParams = new URLSearchParams();
+  const [localFilters, setLocalFilters] = useState<FiltersState>(
+    initialState.filters
+  );
 
-    Object.entries(cleanFilters).forEach(([key, value]) => {
-      updatedSearchParams.set(
-        key,
-        Array.isArray(value) ? value.join(",") : value.toString()
-      );
-    });
+  /* ---------------- URL Sync (Debounced) ---------------- */
 
-    router.push(`${pathname}?${updatedSearchParams.toString()}`);
-  });
+  const updateURL = useMemo(
+    () =>
+      debounce((next: FiltersState) => {
+        const params = new URLSearchParams();
+
+        Object.entries(cleanParams(next)).forEach(([key, value]) => {
+          params.set(
+            key,
+            Array.isArray(value) ? value.join(",") : String(value)
+          );
+        });
+
+        router.push(`${pathname}?${params.toString()}`);
+      }, 400),
+    [router, pathname]
+  );
+
+  useEffect(() => {
+    return () => updateURL.cancel();
+  }, [updateURL]);
+
+  /* ---------------- Handlers ---------------- */
 
   const handleSubmit = () => {
     dispatch(setFilters(localFilters));
@@ -54,26 +72,37 @@ const FiltersFull = () => {
     updateURL(initialState.filters);
   };
 
-  const handleAmenityChange = (amenity: AmenityEnum) => {
+  const toggleAmenity = useCallback((amenity: AmenityEnum) => {
     setLocalFilters((prev) => ({
       ...prev,
       amenities: prev.amenities.includes(amenity)
         ? prev.amenities.filter((a) => a !== amenity)
         : [...prev.amenities, amenity],
     }));
-  };
+  }, []);
+
+  /* ---------------- Location Search ---------------- */
 
   const handleLocationSearch = async () => {
+    if (!localFilters.location.trim()) return;
+
+    const controller = new AbortController();
+
     try {
-      const response = await fetch(
+      const res = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
           localFilters.location
         )}.json?access_token=${
           process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
-        }&fuzzyMatch=true`
+        }&fuzzyMatch=true`,
+        { signal: controller.signal }
       );
-      const data = await response.json();
-      if (data.features && data.features.length > 0) {
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      if (data?.features?.length) {
         const [lng, lat] = data.features[0].center;
         setLocalFilters((prev) => ({
           ...prev,
@@ -81,22 +110,27 @@ const FiltersFull = () => {
         }));
       }
     } catch (err) {
-      console.error("Error search location:", err);
+      if (!(err instanceof DOMException)) {
+        console.error("Location search failed:", err);
+      }
     }
+
+    return () => controller.abort();
   };
 
   if (!isFiltersFullOpen) return null;
 
+  /* ---------------- Render ---------------- */
+
   return (
-    <div className="bg-white rounded-lg px-4 h-full overflow-auto pb-10">
+    <div className="h-full overflow-auto rounded-lg bg-white px-4 pb-10">
       <div className="flex flex-col space-y-6">
         {/* Location */}
-        <div>
-          <h4 className="font-bold mb-2">Location</h4>
+        <Section title="Location">
           <div className="flex items-center">
             <Input
               placeholder="Enter location"
-              value={filters.location}
+              value={localFilters.location}
               onChange={(e) =>
                 setLocalFilters((prev) => ({
                   ...prev,
@@ -107,43 +141,41 @@ const FiltersFull = () => {
             />
             <Button
               onClick={handleLocationSearch}
-              className="rounded-r-xl rounded-l-none border-l-none border-black shadow-none border hover:bg-primary-700 hover:text-primary-50"
+              className="rounded-r-xl border border-black hover:bg-primary-700 hover:text-primary-50"
             >
-              <Search className="w-4 h-4" />
+              <Search className="h-4 w-4" />
             </Button>
           </div>
-        </div>
+        </Section>
 
         {/* Property Type */}
-        <div>
-          <h4 className="font-bold mb-2">Property Type</h4>
+        <Section title="Property Type">
           <div className="grid grid-cols-2 gap-4">
             {Object.entries(PropertyTypeIcons).map(([type, Icon]) => (
-              <div
+              <button
                 key={type}
+                onClick={() =>
+                  setLocalFilters((p) => ({
+                    ...p,
+                    propertyType: type as PropertyTypeEnum,
+                  }))
+                }
                 className={cn(
-                  "flex flex-col items-center justify-center p-4 border rounded-xl cursor-pointer",
+                  "flex flex-col items-center rounded-xl border p-4",
                   localFilters.propertyType === type
                     ? "border-black"
                     : "border-gray-200"
                 )}
-                onClick={() =>
-                  setLocalFilters((prev) => ({
-                    ...prev,
-                    propertyType: type as PropertyTypeEnum,
-                  }))
-                }
               >
-                <Icon className="w-6 h-6 mb-2" />
-                <span>{type}</span>
-              </div>
+                <Icon className="mb-2 h-6 w-6" />
+                {type}
+              </button>
             ))}
           </div>
-        </div>
+        </Section>
 
         {/* Price Range */}
-        <div>
-          <h4 className="font-bold mb-2">Price Range (Monthly)</h4>
+        <Section title="Price Range (Monthly)">
           <Slider
             min={0}
             max={10000}
@@ -152,136 +184,38 @@ const FiltersFull = () => {
               localFilters.priceRange[0] ?? 0,
               localFilters.priceRange[1] ?? 10000,
             ]}
-            onValueChange={(value: any) =>
-              setLocalFilters((prev) => ({
-                ...prev,
-                priceRange: value as [number, number],
-              }))
+            onValueChange={(value: [number, number]) =>
+              setLocalFilters((p) => ({ ...p, priceRange: value }))
             }
           />
-          <div className="flex justify-between mt-2">
-            <span>${localFilters.priceRange[0] ?? 0}</span>
-            <span>${localFilters.priceRange[1] ?? 10000}</span>
-          </div>
-        </div>
-
-        {/* Beds and Baths */}
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <h4 className="font-bold mb-2">Beds</h4>
-            <Select
-              value={localFilters.beds || "any"}
-              onValueChange={(value) =>
-                setLocalFilters((prev) => ({ ...prev, beds: value }))
-              }
-            >
-              <SelectTrigger className="w-full rounded-xl">
-                <SelectValue placeholder="Beds" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Any beds</SelectItem>
-                <SelectItem value="1">1+ bed</SelectItem>
-                <SelectItem value="2">2+ beds</SelectItem>
-                <SelectItem value="3">3+ beds</SelectItem>
-                <SelectItem value="4">4+ beds</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1">
-            <h4 className="font-bold mb-2">Baths</h4>
-            <Select
-              value={localFilters.baths || "any"}
-              onValueChange={(value) =>
-                setLocalFilters((prev) => ({ ...prev, baths: value }))
-              }
-            >
-              <SelectTrigger className="w-full rounded-xl">
-                <SelectValue placeholder="Baths" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Any baths</SelectItem>
-                <SelectItem value="1">1+ bath</SelectItem>
-                <SelectItem value="2">2+ baths</SelectItem>
-                <SelectItem value="3">3+ baths</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Square Feet */}
-        <div>
-          <h4 className="font-bold mb-2">Square Feet</h4>
-          <Slider
-            min={0}
-            max={5000}
-            step={100}
-            value={[
-              localFilters.squareFeet[0] ?? 0,
-              localFilters.squareFeet[1] ?? 5000,
-            ]}
-            onValueChange={(value) =>
-              setLocalFilters((prev) => ({
-                ...prev,
-                squareFeet: value as [number, number],
-              }))
-            }
-            className="[&>.bar]:bg-primary-700"
-          />
-          <div className="flex justify-between mt-2">
-            <span>{localFilters.squareFeet[0] ?? 0} sq ft</span>
-            <span>{localFilters.squareFeet[1] ?? 5000} sq ft</span>
-          </div>
-        </div>
+        </Section>
 
         {/* Amenities */}
-        <div>
-          <h4 className="font-bold mb-2">Amenities</h4>
+        <Section title="Amenities">
           <div className="flex flex-wrap gap-2">
             {Object.entries(AmenityIcons).map(([amenity, Icon]) => (
-              <div
+              <button
                 key={amenity}
+                onClick={() => toggleAmenity(amenity as AmenityEnum)}
                 className={cn(
-                  "flex items-center space-x-2 p-2 border rounded-lg hover:cursor-pointer",
+                  "flex items-center gap-2 rounded-lg border p-2",
                   localFilters.amenities.includes(amenity as AmenityEnum)
                     ? "border-black"
                     : "border-gray-200"
                 )}
-                onClick={() => handleAmenityChange(amenity as AmenityEnum)}
               >
-                <Icon className="w-5 h-5 hover:cursor-pointer" />
-                <Label className="hover:cursor-pointer">
-                  {formatEnumString(amenity)}
-                </Label>
-              </div>
+                <Icon className="h-5 w-5" />
+                <Label>{formatEnumString(amenity)}</Label>
+              </button>
             ))}
           </div>
-        </div>
+        </Section>
 
-        {/* Available From */}
-        <div>
-          <h4 className="font-bold mb-2">Available From</h4>
-          <Input
-            type="date"
-            value={
-              localFilters.availableFrom !== "any"
-                ? localFilters.availableFrom
-                : ""
-            }
-            onChange={(e) =>
-              setLocalFilters((prev) => ({
-                ...prev,
-                availableFrom: e.target.value ? e.target.value : "any",
-              }))
-            }
-            className="rounded-xl"
-          />
-        </div>
-
-        {/* Apply and Reset buttons */}
-        <div className="flex gap-4 mt-6">
+        {/* Actions */}
+        <div className="mt-6 flex gap-4">
           <Button
             onClick={handleSubmit}
-            className="flex-1 bg-primary-700 text-white rounded-xl"
+            className="flex-1 rounded-xl bg-primary-700 text-white"
           >
             APPLY
           </Button>
@@ -297,5 +231,20 @@ const FiltersFull = () => {
     </div>
   );
 };
+
+/* ---------------- Helper ---------------- */
+
+const Section = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) => (
+  <div>
+    <h4 className="mb-2 font-bold">{title}</h4>
+    {children}
+  </div>
+);
 
 export default FiltersFull;

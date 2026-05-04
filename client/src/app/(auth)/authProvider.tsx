@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import { ReactNode, useEffect, useMemo } from "react";
 import { Amplify } from "aws-amplify";
 import {
   Authenticator,
@@ -11,45 +11,50 @@ import {
   View,
 } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
-// https://docs.amplify.aws/gen1/javascript/tools/libraries/configure-categories/
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: process.env.NEXT_PUBLIC_AWS_COGNITO_USER_POOL_ID!,
-      userPoolClientId:
-        process.env.NEXT_PUBLIC_AWS_COGNITO_USER_POOL_CLIENT_ID!,
+/* ---------------- Amplify Config (RUN ONCE) ---------------- */
+
+const amplifyConfigured = (() => {
+  Amplify.configure({
+    Auth: {
+      Cognito: {
+        userPoolId: process.env.NEXT_PUBLIC_AWS_COGNITO_USER_POOL_ID!,
+        userPoolClientId:
+          process.env.NEXT_PUBLIC_AWS_COGNITO_USER_POOL_CLIENT_ID!,
+      },
     },
-  },
-});
+  });
+  return true;
+})();
+
+/* ---------------- Auth UI Customizations ---------------- */
 
 const components = {
   Header() {
     return (
-      <View className="mt-4 mb-7">
+      <View className="mb-7 mt-4">
         <Heading level={3} className="!text-2xl !font-bold">
           ZEN
-          <span className="text-red-500 font-medium hover:!text-primary-300">
-            villa
-          </span>
+          <span className="font-medium text-red-500">villa</span>
         </Heading>
-        <p className="text-muted-foreground mt-2">
+        <p className="mt-2 text-muted-foreground">
           <span className="font-bold">Welcome!</span> Please sign in to continue
         </p>
       </View>
     );
   },
+
   SignIn: {
     Footer() {
       const { toSignUp } = useAuthenticator();
       return (
-        <View className="text-center mt-4">
+        <View className="mt-4 text-center">
           <p className="text-muted-foreground">
             Don&apos;t have an account?{" "}
             <button
               onClick={toSignUp}
-              className="text-primary hover:underline bg-transparent border-none p-0"
+              className="bg-transparent p-0 text-primary hover:underline"
             >
               Sign up here
             </button>
@@ -58,6 +63,7 @@ const components = {
       );
     },
   },
+
   SignUp: {
     FormFields() {
       const { validationErrors } = useAuthenticator();
@@ -68,9 +74,9 @@ const components = {
           <RadioGroupField
             legend="Role"
             name="custom:role"
-            errorMessage={validationErrors?.["custom:role"]}
-            hasError={!!validationErrors?.["custom:role"]}
             isRequired
+            hasError={!!validationErrors?.["custom:role"]}
+            errorMessage={validationErrors?.["custom:role"]}
           >
             <Radio value="tenant">Tenant</Radio>
             <Radio value="manager">Manager</Radio>
@@ -82,12 +88,12 @@ const components = {
     Footer() {
       const { toSignIn } = useAuthenticator();
       return (
-        <View className="text-center mt-4">
+        <View className="mt-4 text-center">
           <p className="text-muted-foreground">
             Already have an account?{" "}
             <button
               onClick={toSignIn}
-              className="text-primary hover:underline bg-transparent border-none p-0"
+              className="bg-transparent p-0 text-primary hover:underline"
             >
               Sign in
             </button>
@@ -98,65 +104,84 @@ const components = {
   },
 };
 
+/* ---------------- Form Field Config ---------------- */
+
 const formFields = {
   signIn: {
     username: {
-      placeholder: "Enter your email",
       label: "Email",
+      placeholder: "Enter your email",
       isRequired: true,
     },
     password: {
-      placeholder: "Enter your password",
       label: "Password",
+      placeholder: "Enter your password",
       isRequired: true,
     },
   },
   signUp: {
     username: {
       order: 1,
-      placeholder: "Choose a username",
       label: "Username",
+      placeholder: "Choose a username",
       isRequired: true,
     },
     email: {
       order: 2,
-      placeholder: "Enter your email address",
       label: "Email",
+      placeholder: "Enter your email address",
       isRequired: true,
     },
     password: {
       order: 3,
-      placeholder: "Create a password",
       label: "Password",
+      placeholder: "Create a password",
       isRequired: true,
     },
     confirm_password: {
       order: 4,
-      placeholder: "Confirm your password",
       label: "Confirm Password",
+      placeholder: "Confirm your password",
       isRequired: true,
     },
   },
 };
 
-const Auth = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuthenticator((context) => [context.user]);
+/* ---------------- Component ---------------- */
+
+interface AuthLayoutProps {
+  children: ReactNode;
+}
+
+const AuthLayout = ({ children }: AuthLayoutProps) => {
+  const { user, isLoading } = useAuthenticator((ctx) => [
+    ctx.user,
+    ctx.isLoading,
+  ]);
+
   const router = useRouter();
   const pathname = usePathname();
 
-  const isAuthPage = pathname.match(/^\/(signin|signup)$/);
-  const isDashboardPage =
+  const isAuthPage =
+    pathname.startsWith("/signin") || pathname.startsWith("/signup");
+  const isProtectedPage =
     pathname.startsWith("/manager") || pathname.startsWith("/tenants");
 
-  // Redirect authenticated users away from auth pages
-  useEffect(() => {
-    if (user && isAuthPage) {
-      router.push("/landing");
-    }
-  }, [user, isAuthPage, router]);
+  /* ---------------- Redirect Logic ---------------- */
 
-  // Allow access to public pages without authentication
-  if (!isAuthPage && !isDashboardPage) {
+  useEffect(() => {
+    if (isLoading) return;
+
+    // Logged-in users should never see auth pages
+    if (user && isAuthPage) {
+      router.replace("/landing");
+    }
+  }, [user, isAuthPage, isLoading, router]);
+
+  /* ---------------- Route Guards ---------------- */
+
+  // Public pages → no auth wrapper
+  if (!isAuthPage && !isProtectedPage) {
     return <>{children}</>;
   }
 
@@ -173,4 +198,4 @@ const Auth = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default Auth;
+export default AuthLayout;
